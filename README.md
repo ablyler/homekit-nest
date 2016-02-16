@@ -1,5 +1,5 @@
 # homekit-nest
-HomeKit Support for [Nest](http://nest.com) using [HomeControl](https://github.com/brutella/hc) and [Nest go library]https://github.com/jsgoecke/nest).
+HomeKit Support for [Nest](http://nest.com) using [HomeControl](https://github.com/brutella/hc) and [Nest go library](https://github.com/jsgoecke/nest).
 
 Nest thermostats are automatically discovered and published as HomeKit accessories on your local network.
 After pairing the thermostats with HomeKit using any iOS HomeKit app (e.g. [Home](http://selfcoded.com/home/)), you can:
