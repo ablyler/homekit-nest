@@ -6,39 +6,43 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/brutella/hc"
+	"github.com/brutella/hc/accessory"
+	"github.com/brutella/hc/characteristic"
 	"github.com/brutella/log"
-	"github.com/brutella/hc/hap"
-	"github.com/brutella/hc/model"
-	"github.com/brutella/hc/model/accessory"
 
 	"github.com/ablyler/nest"
 )
 
 type HKThermostat struct {
 	accessory *accessory.Accessory
-	transport hap.Transport
+	transport hc.Transport
 
-	thermostat model.Thermostat
+	thermostat *accessory.Thermostat
 }
 
 var (
-	thermostats        map[string]*HKThermostat
-	nestPin            string
-	homekitPin         string
-	productId          string
-	productSecret      string
-	state              string
+	thermostats   map[string]*HKThermostat
+	nestPin       string
+	nestToken     string
+	homekitPin    string
+	productId     string
+	productSecret string
+	state         string
 )
 
 func logEvent(device *nest.Thermostat) {
-    data, _ := json.MarshalIndent(device, "", "  ")
-    fmt.Println(string(data))
+	data, _ := json.MarshalIndent(device, "", "  ")
+	fmt.Println(string(data))
 }
 
 func Connect() {
-    client := nest.New(productId, state, productSecret, nestPin)
-    client.Authorize()
-    // fmt.Println(client.Token)
+	client := nest.New(productId, state, productSecret, nestPin)
+	client.Token = nestToken
+	if nestToken == "" {
+		client.Authorize()
+	}
+	fmt.Println(client.Token)
 
 	client.DevicesStream(func(devices *nest.Devices, err error) {
 		if err != nil {
@@ -47,39 +51,38 @@ func Connect() {
 		}
 
 		for _, device := range devices.Thermostats {
-			// logEvent(device)
+			logEvent(device)
 
 			hkThermostat := GetHKThermostat(device)
-			hkThermostat.thermostat.SetTemperature(float64(device.AmbientTemperatureC))
-			hkThermostat.thermostat.SetTargetTemperature(float64(device.TargetTemperatureC))
+			hkThermostat.thermostat.Thermostat.CurrentTemperature.SetValue(float64(device.AmbientTemperatureC))
+			hkThermostat.thermostat.Thermostat.TargetTemperature.SetValue(float64(device.TargetTemperatureC))
 
-			var targetMode model.HeatCoolModeType
+			var targetMode int
 
 			switch device.HvacMode {
 			case "heat":
-				targetMode = model.HeatCoolModeHeat
+				targetMode = characteristic.TargetHeatingCoolingStateHeat
 			case "cool":
-				targetMode = model.HeatCoolModeCool
+				targetMode = characteristic.TargetHeatingCoolingStateCool
 			case "off":
-				targetMode = model.HeatCoolModeOff
+				targetMode = characteristic.TargetHeatingCoolingStateOff
 			default:
-				targetMode = model.HeatCoolModeAuto
+				targetMode = characteristic.TargetHeatingCoolingStateAuto
 			}
 
-			hkThermostat.thermostat.SetTargetMode(targetMode)
+			hkThermostat.thermostat.Thermostat.TargetHeatingCoolingState.SetValue(targetMode)
 
-			var mode model.HeatCoolModeType
+			var mode int
 
 			switch device.HvacState {
 			case "heating":
-				mode = model.HeatCoolModeHeat
+				mode = characteristic.CurrentHeatingCoolingStateHeat
 			case "cooling":
-				mode = model.HeatCoolModeCool
+				mode = characteristic.CurrentHeatingCoolingStateCool
 			default:
-				mode = model.HeatCoolModeOff
+				mode = characteristic.CurrentHeatingCoolingStateOff
 			}
-
-			hkThermostat.thermostat.SetMode(mode)
+			hkThermostat.thermostat.Thermostat.CurrentHeatingCoolingState.SetValue(mode)
 		}
 	})
 }
@@ -92,15 +95,15 @@ func GetHKThermostat(nestThermostat *nest.Thermostat) *HKThermostat {
 
 	log.Printf("[INFO] Creating New HKThermostat for %s", nestThermostat.Name)
 
-	info := model.Info{
+	info := accessory.Info{
 		Name:         nestThermostat.Name,
 		Manufacturer: "Nest",
 	}
 
 	thermostat := accessory.NewThermostat(info, float64(nestThermostat.AmbientTemperatureC), 9, 32, float64(0.5))
 
-	config := hap.Config{Pin: homekitPin}
-	transport, err := hap.NewIPTransport(config, thermostat.Accessory)
+	config := hc.Config{Pin: homekitPin}
+	transport, err := hc.NewIPTransport(config, thermostat.Accessory)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -112,25 +115,24 @@ func GetHKThermostat(nestThermostat *nest.Thermostat) *HKThermostat {
 	hkThermostat = &HKThermostat{thermostat.Accessory, transport, thermostat}
 	thermostats[nestThermostat.DeviceID] = hkThermostat
 
-	thermostat.OnTargetTempChange(func(target float64) {
+	thermostat.Thermostat.TargetTemperature.OnValueRemoteUpdate(func(target float64) {
 		log.Printf("[INFO] Changed Target Temp for %s", nestThermostat.Name)
 		nestThermostat.SetTargetTempC(float32(target))
 	})
 
-	thermostat.OnTargetModeChange(func(mode model.HeatCoolModeType) {
+	thermostat.Thermostat.TargetHeatingCoolingState.OnValueRemoteUpdate(func(mode int) {
 		log.Printf("[INFO] Changed Mode for %s", nestThermostat.Name)
 
-		if mode == model.HeatCoolModeHeat {
+		if mode == characteristic.CurrentHeatingCoolingStateHeat {
 			nestThermostat.SetHvacMode(nest.Heat)
-		} else if mode == model.HeatCoolModeCool {
+		} else if mode == characteristic.CurrentHeatingCoolingStateCool {
 			nestThermostat.SetHvacMode(nest.Cool)
-		} else if mode == model.HeatCoolModeOff {
+		} else if mode == characteristic.CurrentHeatingCoolingStateOff {
 			nestThermostat.SetHvacMode(nest.Off)
 		} else {
 			nestThermostat.SetHvacMode(nest.HeatCool)
 		}
 	})
-
 
 	return hkThermostat
 }
@@ -142,6 +144,7 @@ func main() {
 	productSecretArg := flag.String("product-secret", "", "Nest provided product secret")
 	stateArg := flag.String("state", "", "A value you create, used during OAuth")
 	nestPinArg := flag.String("nest-pin", "", "PIN generated from the Nest site")
+	nestTokenArg := flag.String("nest-token", "", "Authorization token from nest auth.")
 	homekitPinArg := flag.String("homekit-pin", "", "PIN you create to be used to pair Nest with HomeKit")
 	verboseArg := flag.Bool("v", false, "Whether or not log output is displayed")
 
@@ -151,6 +154,7 @@ func main() {
 	productSecret = *productSecretArg
 	state = *stateArg
 	nestPin = *nestPinArg
+	nestToken = *nestTokenArg
 	homekitPin = *homekitPinArg
 
 	if !*verboseArg {
@@ -158,7 +162,7 @@ func main() {
 		log.Verbose = false
 	}
 
-	hap.OnTermination(func() {
+	hc.OnTermination(func() {
 		os.Exit(1)
 	})
 

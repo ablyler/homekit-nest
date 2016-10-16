@@ -33,6 +33,7 @@ Required
 
 - `-homekit-pin [8-digits]` must be entered on iOS to pair with the light bulb(s)
 - `-nest-pin` authorization code from Nest - https://developer.nest.com/documentation/how-to-auth
+- `-nest-token` authorization token from Nest after successful authorization - https://developer.nest.com/documentation/how-to-auth
 - `-product-id` id of the product that you registered on the Nest developer portal
 - `-product-secret` secret key of the product that you registered on the Nest developer portal
 - `-state` a value you create, used during OAuth
