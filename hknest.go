@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/brutella/hc"
 	"github.com/brutella/hc/accessory"
@@ -29,6 +30,7 @@ var (
 	productId     string
 	productSecret string
 	state         string
+	storagePath   string
 )
 
 func logEvent(device *nest.Thermostat) {
@@ -102,7 +104,10 @@ func GetHKThermostat(nestThermostat *nest.Thermostat) *HKThermostat {
 
 	thermostat := accessory.NewThermostat(info, float64(nestThermostat.AmbientTemperatureC), 9, 32, float64(0.5))
 
-	config := hc.Config{Pin: homekitPin}
+	config := hc.Config{
+		Pin:         homekitPin,
+		StoragePath: filepath.Join(storagePath, info.Name),
+	}
 	transport, err := hc.NewIPTransport(config, thermostat.Accessory)
 	if err != nil {
 		log.Fatal(err)
@@ -147,6 +152,7 @@ func main() {
 	nestTokenArg := flag.String("nest-token", "", "Authorization token from nest auth.")
 	homekitPinArg := flag.String("homekit-pin", "", "PIN you create to be used to pair Nest with HomeKit")
 	verboseArg := flag.Bool("v", false, "Whether or not log output is displayed")
+	storagePathArg := flag.String("storage-path", "", "Path to store accessory information")
 
 	flag.Parse()
 
@@ -156,6 +162,7 @@ func main() {
 	nestPin = *nestPinArg
 	nestToken = *nestTokenArg
 	homekitPin = *homekitPinArg
+	storagePath = *storagePathArg
 
 	if !*verboseArg {
 		log.Info = false
